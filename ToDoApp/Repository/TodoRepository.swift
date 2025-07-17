@@ -21,6 +21,7 @@ protocol TodoRepositoryProtocol {
 // MARK: - Core Data Repository
 class TodoRepository: ObservableObject, TodoRepositoryProtocol {
     private let viewContext: NSManagedObjectContext
+    private let notificationManager = NotificationManager.shared
     
     init(viewContext: NSManagedObjectContext) {
         self.viewContext = viewContext
@@ -36,6 +37,9 @@ class TodoRepository: ObservableObject, TodoRepositoryProtocol {
         newTask.dueDate = data.finalDateTime
         
         try saveContext()
+        
+        // Naplánovat notifikace pro nový úkol
+        notificationManager.scheduleTaskNotification(for: newTask)
     }
     
     func updateTask(_ task: TodoTask, title: String, isCompleted: Bool, dueDate: Date) throws {
@@ -54,10 +58,21 @@ class TodoRepository: ObservableObject, TodoRepositoryProtocol {
         task.dueDate = dueDate
         
         try saveContext()
+        
+        // Aktualizovat notifikace
+        if isCompleted {
+            notificationManager.cancelTaskNotifications(for: task)
+        } else {
+            notificationManager.scheduleTaskNotification(for: task)
+        }
+        
         print("Task updated successfully")
     }
     
     func deleteTask(_ task: TodoTask) throws {
+        // Zrušit notifikace před smazáním
+        notificationManager.cancelTaskNotifications(for: task)
+        
         viewContext.delete(task)
         try saveContext()
     }
@@ -77,6 +92,14 @@ class TodoRepository: ObservableObject, TodoRepositoryProtocol {
         
         task.isCompleted.toggle()
         print("Toggling task: \(task.title ?? "Unknown") to \(task.isCompleted)")
+        
+        // Aktualizovat notifikace
+        if task.isCompleted {
+            notificationManager.cancelTaskNotifications(for: task)
+        } else {
+            notificationManager.scheduleTaskNotification(for: task)
+        }
+        
         try saveContext()
         print("Task toggled successfully")
     }

@@ -143,11 +143,25 @@ class EditTaskViewModel: ObservableObject {
             print("IsCompleted changed in ViewModel: \(oldValue) -> \(isCompleted)")
         }
     }
-    @Published var dueDate: Date {
+    @Published var selectedDate: Date {
         didSet {
-            print("Due date changed in ViewModel: \(oldValue) -> \(dueDate)")
+            print("Selected date changed in ViewModel: \(oldValue) -> \(selectedDate)")
+            validateDateTime()
         }
     }
+    @Published var selectedTime: Date {
+        didSet {
+            print("Selected time changed in ViewModel: \(oldValue) -> \(selectedTime)")
+            validateDateTime()
+        }
+    }
+    @Published var hasTime: Bool {
+        didSet {
+            print("Has time changed in ViewModel: \(oldValue) -> \(hasTime)")
+            validateDateTime()
+        }
+    }
+    @Published var showingDateError = false
     
     let task: TodoTask // Změněno na let a public
     private let repository: TodoRepositoryProtocol
@@ -157,15 +171,54 @@ class EditTaskViewModel: ObservableObject {
         self.repository = repository
         self.title = task.title ?? "Bez názvu"
         self.isCompleted = task.isCompleted
-        self.dueDate = task.dueDate ?? Date()
+        
+        // Inicializace data a času z existujícího úkolu
+        if let dueDate = task.dueDate {
+            let calendar = Calendar.current
+            let dateComponents = calendar.dateComponents([.year, .month, .day], from: dueDate)
+            let timeComponents = calendar.dateComponents([.hour, .minute], from: dueDate)
+            
+            self.selectedDate = calendar.date(from: dateComponents) ?? Date()
+            self.selectedTime = calendar.date(from: timeComponents) ?? Date()
+            self.hasTime = timeComponents.hour != 0 || timeComponents.minute != 0
+        } else {
+            self.selectedDate = Date()
+            self.selectedTime = Date()
+            self.hasTime = false
+        }
         
         print("EditTaskViewModel initialized for task: \(task.title ?? "Unknown")")
         print("   - Original due date: \(task.dueDate?.description ?? "nil")")
-        print("   - Initial due date: \(dueDate.description)")
+        print("   - Initial selected date: \(selectedDate.description)")
+        print("   - Initial selected time: \(selectedTime.description)")
+        print("   - Has time: \(hasTime)")
+        
+        // Validace při inicializaci
+        validateDateTime()
     }
     
     var canSave: Bool {
-        !title.trimmingCharacters(in: .whitespaces).isEmpty
+        !title.trimmingCharacters(in: .whitespaces).isEmpty && !isInPast
+    }
+    
+    var isInPast: Bool {
+        finalDateTime < Date()
+    }
+    
+    var finalDateTime: Date {
+        let calendar = Calendar.current
+        var dateComponents = calendar.dateComponents([.year, .month, .day], from: selectedDate)
+        
+        if hasTime {
+            let timeComponents = calendar.dateComponents([.hour, .minute], from: selectedTime)
+            dateComponents.hour = timeComponents.hour
+            dateComponents.minute = timeComponents.minute
+        } else {
+            dateComponents.hour = 23
+            dateComponents.minute = 59
+        }
+        
+        return calendar.date(from: dateComponents) ?? selectedDate
     }
     
     var dateRange: ClosedRange<Date> {
@@ -174,16 +227,20 @@ class EditTaskViewModel: ObservableObject {
         return today...futureDate
     }
     
+    func validateDateTime() {
+        showingDateError = isInPast
+    }
+    
     func saveChanges() -> Bool {
         guard canSave else { return false }
         
         print("Saving changes for task: \(task.title ?? "Unknown")")
         print("   - Title: \(title)")
-        print("   - Due Date: \(dueDate)")
+        print("   - Final DateTime: \(finalDateTime)")
         print("   - Is Completed: \(isCompleted)")
         
         do {
-            try repository.updateTask(task, title: title, isCompleted: isCompleted, dueDate: dueDate)
+            try repository.updateTask(task, title: title, isCompleted: isCompleted, dueDate: finalDateTime)
             print("Changes saved successfully")
             return true
         } catch {

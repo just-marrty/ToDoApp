@@ -135,18 +135,18 @@ struct EditTaskView: View {
                         
                         VStack(spacing: 0) {
                             HStack {
-                                Text("Datum a čas")
+                                Text("Datum")
                                     .foregroundColor(theme.textColor)
                                 Spacer()
                                 DatePicker(
                                     "",
-                                    selection: $viewModel.dueDate,
+                                    selection: $viewModel.selectedDate,
                                     in: viewModel.dateRange,
-                                    displayedComponents: [.date, .hourAndMinute]
+                                    displayedComponents: .date
                                 )
                                 .disabled(viewModel.task.isCompleted)
-                                .onChange(of: viewModel.dueDate) { oldValue, newValue in
-                                    print("🔄 Due date changed in EditTaskView: \(oldValue) -> \(newValue)")
+                                .onChange(of: viewModel.selectedDate) { _, _ in
+                                    print("🔄 Selected date changed in EditTaskView")
                                 }
                                 .labelsHidden()
                             }
@@ -156,6 +156,60 @@ struct EditTaskView: View {
                             
                             Divider()
                                 .background(theme.secondaryTextColor.opacity(0.3))
+                            
+                            HStack {
+                                Text("Přidat čas")
+                                    .foregroundColor(theme.textColor)
+                                Spacer()
+                                Toggle("", isOn: $viewModel.hasTime)
+                                    .onChange(of: viewModel.hasTime) { _, newValue in
+                                        if newValue {
+                                            viewModel.selectedTime = Date()
+                                        }
+                                        print("🔄 Has time changed in EditTaskView: \(newValue)")
+                                    }
+                                    .disabled(viewModel.task.isCompleted)
+                                    .tint(theme.accentColor)
+                                    .labelsHidden()
+                            }
+                            .padding(.horizontal)
+                            .padding(.vertical, 12)
+                            .background(theme.backgroundColor)
+                            
+                            Divider()
+                                .background(theme.secondaryTextColor.opacity(0.3))
+                            
+                            if viewModel.hasTime {
+                                HStack {
+                                    Text("Čas")
+                                        .foregroundColor(theme.textColor)
+                                    Spacer()
+                                    DatePicker(
+                                        "",
+                                        selection: $viewModel.selectedTime,
+                                        displayedComponents: .hourAndMinute
+                                    )
+                                    .disabled(viewModel.task.isCompleted)
+                                    .onChange(of: viewModel.selectedTime) { _, _ in
+                                        print("🔄 Selected time changed in EditTaskView")
+                                    }
+                                    .labelsHidden()
+                                }
+                                .padding(.horizontal)
+                                .padding(.vertical, 12)
+                                .background(theme.backgroundColor)
+                                
+                                Divider()
+                                    .background(theme.secondaryTextColor.opacity(0.3))
+                            }
+                        }
+                        
+                        if viewModel.showingDateError {
+                            Text("Nelze nastavit termín v minulosti")
+                                .foregroundColor(theme.expiredColor)
+                                .font(.caption)
+                                .padding(.horizontal)
+                                .padding(.top, 8)
                         }
                     }
                     
