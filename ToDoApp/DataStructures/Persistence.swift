@@ -14,10 +14,32 @@ struct PersistenceController {
     static let preview: PersistenceController = {
         let result = PersistenceController(inMemory: true)
         let viewContext = result.container.viewContext
-        for _ in 0..<10 {
-            let newItem = Item(context: viewContext)
-            newItem.timestamp = Date()
-        }
+        
+        // Přidáme ukázkové úkoly pro Preview
+        let sampleTask1 = TodoTask(context: viewContext)
+        sampleTask1.id = UUID()
+        sampleTask1.title = "Nakoupit potraviny"
+        sampleTask1.taskDescription = "Mléko, chléb, vejce"
+        sampleTask1.isCompleted = false
+        sampleTask1.createdAt = Date()
+        sampleTask1.dueDate = Date().addingTimeInterval(86400) // zítra
+        
+        let sampleTask2 = TodoTask(context: viewContext)
+        sampleTask2.id = UUID()
+        sampleTask2.title = "Uklidit pokoj"
+        sampleTask2.taskDescription = "Vysát, utřít prach"
+        sampleTask2.isCompleted = true
+        sampleTask2.createdAt = Date().addingTimeInterval(-86400) // včera
+        sampleTask2.dueDate = Date()
+        
+        let sampleTask3 = TodoTask(context: viewContext)
+        sampleTask3.id = UUID()
+        sampleTask3.title = "Cvičit"
+        sampleTask3.taskDescription = "30 minut kardio"
+        sampleTask3.isCompleted = false
+        sampleTask3.createdAt = Date()
+        sampleTask3.dueDate = Date().addingTimeInterval(-3600) // před hodinou (expirované)
+        
         do {
             try viewContext.save()
         } catch {
