@@ -126,7 +126,7 @@ struct EditTaskView: View {
                     // Termín sekce
                     VStack(alignment: .leading, spacing: 0) {
                         VStack(alignment: .leading, spacing: 0) {
-                            Text("Termín")
+                            Text("Nový deadline")
                                 .font(.headline)
                                 .foregroundColor(theme.textColor)
                                 .padding(.horizontal)
@@ -244,7 +244,7 @@ struct EditTaskView: View {
                             
                             if let dueDate = viewModel.task.dueDate {
                                 HStack {
-                                    Text("Původní termín")
+                                    Text("Původní deadline")
                                         .foregroundColor(theme.textColor)
                                     Spacer()
                                     Text(formatDateTimeCzech(dueDate))
@@ -370,7 +370,7 @@ struct DateTimeSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 0) {
-                Text("Termín")
+                Text("Deadline")
                     .font(.headline)
                     .foregroundColor(theme.textColor)
                     .padding(.horizontal)
@@ -466,7 +466,7 @@ struct TaskInfoSection: View {
             }
             
             if let dueDate = task.dueDate {
-                TaskInfoRow(label: "Původní termín", value: formatDateCzech(dueDate))
+                TaskInfoRow(label: "Původní deadline", value: formatDateCzech(dueDate))
             }
         }
     }

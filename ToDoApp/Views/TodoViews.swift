@@ -14,7 +14,6 @@ struct ContentView: View {
     @Environment(\.todoRepository) private var repository
     @StateObject private var viewModel: ContentViewModel
     @StateObject private var cloudKitStatusManager = CloudKitStatusManager.shared
-    @State private var uiUpdateTrigger = 0 // Force UI updates
     @State private var showingCloudKitInfo = false
     
     @FetchRequest(
@@ -24,79 +23,48 @@ struct ContentView: View {
         ]
     ) private var tasks: FetchedResults<TodoTask>
     
-    // Listen to context changes to force UI updates
-    @State private var contextChangeTrigger = 0
-    
     init() {
-        // Use DI container to create ViewModel
         self._viewModel = StateObject(wrappedValue: DIContainer.shared.makeContentViewModel())
     }
     
     var body: some View {
-        NavigationView {
-            VStack(spacing: 0) {
-                // CloudKit Status Bar
-                CloudKitStatusBar()
-                
-                // Statistiky
-                StatsView(statistics: viewModel.statistics(from: Array(tasks)))
-                
-                // Filtry
-                FilterBarView(selectedFilter: $viewModel.selectedFilter)
-                
-                // Seznam úkolů
-                TaskListView(
-                    tasks: viewModel.filteredTasks(from: Array(tasks)),
-                    onToggle: { task in
-                        withAnimation(.easeInOut(duration: 0.3)) {
-                            viewModel.toggleTask(task)
-                            // Force UI refresh
-                            uiUpdateTrigger += 1
-                        }
-                    },
-                    onDelete: viewModel.deleteTask,
-                    onEdit: viewModel.editTask,
-                    theme: viewModel.selectedTheme
-                )
-                .id("\(uiUpdateTrigger)-\(contextChangeTrigger)-\(tasks.map { $0.dueDate?.timeIntervalSince1970 ?? 0 }.reduce(0, +))") // Force refresh when tasks change or due dates change
-                
-                Spacer()
-            }
-            .background(viewModel.selectedTheme.backgroundColor)
-            .navigationTitle("Moje úkoly")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    ThemeToggleView(selectedTheme: $viewModel.selectedTheme)
-                }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    HStack {
-                        // CloudKit info button
-                        Button(action: { showingCloudKitInfo = true }) {
-                            Image(systemName: "info.circle")
-                                .foregroundColor(viewModel.selectedTheme.accentColor)
-                        }
-                        
-                        // Sync button
-                        Button(action: {
-                            Task {
-                                try? await repository.syncWithCloudKit()
-                            }
-                        }) {
-                            Image(systemName: "arrow.clockwise")
-                                .foregroundColor(viewModel.selectedTheme.accentColor)
-                        }
-                        .disabled(!cloudKitStatusManager.isCloudKitAvailable)
-                        
-                        // Add task button
-                        Button(action: { viewModel.showingAddTask = true }) {
-                            Image(systemName: "plus")
-                                .foregroundColor(viewModel.selectedTheme.accentColor)
-                        }
-                    }
-                }
-            }
+        VStack(spacing: 0) {
+            // Custom Header
+            CustomHeaderView(
+                selectedTheme: $viewModel.selectedTheme,
+                onInfo: { showingCloudKitInfo = true },
+                onSync: { Task { try? await repository.syncWithCloudKit() } },
+                onAdd: { viewModel.showingAddTask = true },
+                isCloudKitAvailable: cloudKitStatusManager.isCloudKitAvailable
+            )
+            .background(viewModel.selectedTheme.accentColor.opacity(0.1))
+            .animation(.easeInOut(duration: 0.6), value: viewModel.selectedTheme)
+            
+            // CloudKit Status Bar
+            CloudKitStatusBar()
+                .background(viewModel.selectedTheme.accentColor.opacity(0.1))
+                .animation(.easeInOut(duration: 0.6), value: viewModel.selectedTheme)
+            
+            // Statistiky
+            StatsView(statistics: viewModel.statistics(from: Array(tasks)))
+            
+            // Filtry
+            FilterBarView(selectedFilter: $viewModel.selectedFilter)
+            
+            // Seznam úkolů
+            TaskListView(
+                tasks: viewModel.filteredTasks(from: Array(tasks)),
+                onToggle: { task in viewModel.toggleTask(task) },
+                onDelete: viewModel.deleteTask,
+                onEdit: viewModel.editTask,
+                theme: viewModel.selectedTheme
+            )
+            Spacer()
         }
+        .background(viewModel.selectedTheme.backgroundColor)
+        .preferredColorScheme(viewModel.selectedTheme.colorScheme)
+        .environment(\.selectedTheme, viewModel.selectedTheme)
+        .animation(.easeInOut(duration: 0.6), value: viewModel.selectedTheme)
         .sheet(isPresented: $viewModel.showingAddTask) {
             AddTaskView(theme: viewModel.selectedTheme)
         }
@@ -108,37 +76,65 @@ struct ContentView: View {
         .sheet(isPresented: $showingCloudKitInfo) {
             CloudKitInfoView()
         }
-        .preferredColorScheme(viewModel.selectedTheme.colorScheme)
-        .environment(\.selectedTheme, viewModel.selectedTheme)
-        .onReceive(NotificationCenter.default.publisher(for: .taskExpired)) { _ in
-            // Force UI refresh when task expires
-            withAnimation(.easeInOut(duration: 0.3)) {
-                uiUpdateTrigger += 1
-                contextChangeTrigger += 1
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .cloudKitDataChanged)) { _ in
-            // Force UI refresh when CloudKit data changes
-            withAnimation(.easeInOut(duration: 0.3)) {
-                uiUpdateTrigger += 1
-                contextChangeTrigger += 1
-            }
-        }
         .onAppear {
-            // Refresh UI when app becomes active
-            uiUpdateTrigger += 1
+            TaskExpirationManager.shared.checkAndMarkExpiredTasks()
+        }
+    }
+}
+
+// Custom Header View
+struct CustomHeaderView: View {
+    @Binding var selectedTheme: AppTheme
+    var onInfo: () -> Void
+    var onSync: () -> Void
+    var onAdd: () -> Void
+    var isCloudKitAvailable: Bool
+    
+    var body: some View {
+        HStack {
+            // Theme toggle
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.6)) {
+                    selectedTheme = selectedTheme == .default ? .dark : .default
+                }
+            }) {
+                Image(systemName: selectedTheme == .default ? "moon.fill" : "sun.max.fill")
+                    .foregroundColor(selectedTheme.accentColor)
+                    .font(.title2)
+            }
+            .accessibilityLabel(selectedTheme == .default ? "Přepnout na tmavý režim" : "Přepnout na světlý režim")
             
-            // Kontrola expirovaných úkolů při otevření
-            TaskExpirationManager.shared.checkAndMarkExpiredTasks()
+            Spacer()
+            
+            Text("Moje úkoly")
+                .font(.largeTitle).bold()
+                .foregroundColor(selectedTheme.textColor)
+                .animation(.easeInOut(duration: 0.6), value: selectedTheme)
+            
+            Spacer()
+            
+            HStack(spacing: 16) {
+                Button(action: onInfo) {
+                    Image(systemName: "info.circle")
+                        .foregroundColor(selectedTheme.accentColor)
+                        .font(.title2)
+                }
+                Button(action: onSync) {
+                    Image(systemName: "arrow.clockwise")
+                        .foregroundColor(selectedTheme.accentColor)
+                        .font(.title2)
+                }
+                .disabled(!isCloudKitAvailable)
+                Button(action: onAdd) {
+                    Image(systemName: "plus")
+                        .foregroundColor(selectedTheme.accentColor)
+                        .font(.title2)
+                }
+            }
         }
-        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
-            // Kontrola expirovaných úkolů při návratu z background
-            TaskExpirationManager.shared.checkAndMarkExpiredTasks()
-        }
-        // .onReceive(viewContext.objectWillChange) { _ in
-        //     // Force UI refresh when context changes
-        //     contextChangeTrigger += 1
-        // }
+        .padding(.horizontal)
+        .padding(.top, 16)
+        .padding(.bottom, 8)
     }
 }
 
@@ -329,11 +325,7 @@ struct StatsView: View {
         }
         .padding(.horizontal)
         .padding(.top)
-        .animation(.easeInOut(duration: 0.3), value: statistics.totalCount)
-        .animation(.easeInOut(duration: 0.3), value: statistics.completedCount)
-        .animation(.easeInOut(duration: 0.3), value: statistics.activeCount)
-        .animation(.easeInOut(duration: 0.3), value: statistics.expiredCount)
-        .id("\(statistics.totalCount)-\(statistics.completedCount)-\(statistics.activeCount)-\(statistics.expiredCount)") // Force refresh when statistics change
+
     }
 }
 
@@ -349,8 +341,6 @@ struct StatCard: View {
                 .font(.title2)
                 .fontWeight(.bold)
                 .foregroundColor(theme.accentColor) // Vždy tmavě oranžová pro čísla
-                .contentTransition(.numericText())
-                .animation(.easeInOut(duration: 0.3), value: value)
             
             Text(title)
                 .font(.caption)
@@ -398,9 +388,9 @@ struct FilterButton: View {
                 .fontWeight(.medium)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
-                .background(isSelected ? theme.accentColor : theme.taskRowBackground)
-                .foregroundColor(isSelected ? .white : theme.textColor)
-                .cornerRadius(20)
+                        .background(isSelected ? theme.accentColor : theme.taskRowBackground)
+        .foregroundColor(isSelected ? .white : theme.textColor)
+        .cornerRadius(20)
         }
     }
 }
@@ -411,7 +401,7 @@ struct ThemeToggleView: View {
     
     var body: some View {
         Button(action: {
-            withAnimation(.easeInOut(duration: 0.3)) {
+            withAnimation(.easeInOut(duration: 0.5)) {
                 selectedTheme = selectedTheme == .default ? .dark : .default
             }
         }) {
@@ -447,22 +437,17 @@ struct TaskListView: View {
                     .listRowSeparator(.hidden)
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                         Button(role: .destructive) {
-                            withAnimation(.easeInOut(duration: 0.3)) {
-                                onDelete(task)
-                            }
+                            onDelete(task)
                         } label: {
                             Image(systemName: "trash")
                                 .foregroundColor(.white)
                         }
                         .tint(theme.accentColor)
                     }
-                    .id("\(task.objectID.uriRepresentation().absoluteString)-\(task.dueDate?.timeIntervalSince1970 ?? 0)-\(task.isCompleted)") // Force refresh on dueDate or completion
                 }
             }
             .listStyle(PlainListStyle())
             .scrollContentBackground(.hidden)
-            .animation(.easeInOut(duration: 0.2), value: tasks.count)
-            .id("\(tasks.count)-\(tasks.map { $0.dueDate?.timeIntervalSince1970 ?? 0 }.reduce(0, +))") // Force refresh when tasks count or due dates change
         }
     }
 }
@@ -505,7 +490,6 @@ struct TaskRowView: View {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundColor(theme.completedColor)
                     .font(.title2)
-                    .animation(.easeInOut(duration: 0.3), value: task.isCompleted)
             } else {
                 // Pro expirované nesplněné úkoly zobrazit ikonu "clock.badge.exclamationmark"
                 Image(systemName: "clock.badge.exclamationmark")
@@ -524,8 +508,6 @@ struct TaskRowView: View {
         .padding(.horizontal, 12)
         .background(theme.taskRowBackground)
         .cornerRadius(8)
-        .animation(.easeInOut(duration: 0.3), value: task.isCompleted)
-        .id("\(task.objectID.uriRepresentation().absoluteString)-\(task.dueDate?.timeIntervalSince1970 ?? 0)-\(task.isCompleted)") // Force refresh on dueDate or completion
     }
 }
 
@@ -542,7 +524,6 @@ struct CheckboxView: View {
                 .scaleEffect(isCompleted ? 1.1 : 1.0)
         }
         .buttonStyle(PlainButtonStyle())
-        .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isCompleted)
         .accessibilityLabel(isCompleted ? "Odznačit jako nesplněný" : "Označit jako splněný")
     }
 }
@@ -557,7 +538,6 @@ struct TaskContentView: View {
                 Text(task.title ?? "Bez názvu")
                     .font(.headline)
                     .foregroundColor(task.isCompleted ? theme.secondaryTextColor : theme.textColor)
-                    .animation(.easeInOut(duration: 0.3), value: task.isCompleted)
                 
                 Spacer()
                 
@@ -569,15 +549,12 @@ struct TaskContentView: View {
                     .font(.subheadline)
                     .foregroundColor(theme.secondaryTextColor)
                     .lineLimit(2)
-                    .animation(.easeInOut(duration: 0.3), value: task.isCompleted)
             }
             
             if let date = task.dueDate {
                 TaskDateView(date: date, hasTime: task.hasTime)
             }
         }
-        .animation(.easeInOut(duration: 0.2), value: task.isCompleted)
-        .id("\(task.objectID.uriRepresentation().absoluteString)-\(task.dueDate?.timeIntervalSince1970 ?? 0)-\(task.isCompleted)") // Force refresh on dueDate or completion
     }
 }
 
@@ -595,7 +572,6 @@ struct TaskBadgeView: View {
                     .transition(.scale.combined(with: .opacity))
             }
         }
-        .id("\(task.objectID.uriRepresentation().absoluteString)-\(task.dueDate?.timeIntervalSince1970 ?? 0)-\(task.isCompleted)-\(task.isExpired)") // Force refresh on dueDate, completion or expired
     }
 }
 
@@ -612,7 +588,6 @@ struct BadgeView: View {
             .background(color)
             .foregroundColor(.white)
             .cornerRadius(4)
-            .animation(.easeInOut(duration: 0.2), value: text)
     }
 }
 
@@ -641,7 +616,6 @@ struct TaskDateView: View {
                 .foregroundColor(theme.secondaryTextColor)
             }
         }
-        .id("\(date.timeIntervalSince1970)-\(hasTime)") // Force refresh when date or hasTime changes
     }
     
     private func formatDateCzech(_ date: Date) -> String {
