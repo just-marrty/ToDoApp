@@ -178,6 +178,44 @@ extension TodoTask {
         let components = calendar.dateComponents([.hour, .minute], from: date)
         return components.hour != 0 || components.minute != 0
     }
+    
+    // Automatické označení jako expirované při přístupu
+    var isExpiredWithAutoMark: Bool {
+        let expired = isExpired
+        if expired && !isCompleted {
+            // Automaticky označit jako expirované (můžeme přidat nějaké pole pro tracking)
+            print("Task auto-marked as expired: \(title ?? "Unknown")")
+        }
+        return expired
+    }
+}
+
+// MARK: - Task Expiration Manager
+class TaskExpirationManager: ObservableObject {
+    static let shared = TaskExpirationManager()
+    
+    private init() {}
+    
+    // Kontrola a označení expirovaných úkolů
+    func checkAndMarkExpiredTasks() {
+        let context = PersistenceController.shared.container.viewContext
+        let fetchRequest: NSFetchRequest<TodoTask> = TodoTask.fetchRequest()
+        fetchRequest.predicate = NSPredicate(format: "dueDate < %@ AND isCompleted == NO", Date() as CVarArg)
+        
+        do {
+            let expiredTasks = try context.fetch(fetchRequest)
+            if !expiredTasks.isEmpty {
+                print("Found \(expiredTasks.count) expired tasks")
+                
+                // Force UI refresh
+                DispatchQueue.main.async {
+                    NotificationCenter.default.post(name: .taskExpired, object: nil)
+                }
+            }
+        } catch {
+            print("Error checking expired tasks: \(error)")
+        }
+    }
 }
 
 // MARK: - New Task Data

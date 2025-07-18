@@ -82,6 +82,24 @@ struct ContentView: View {
         }
         .preferredColorScheme(viewModel.selectedTheme.colorScheme)
         .environment(\.selectedTheme, viewModel.selectedTheme)
+        .onReceive(NotificationCenter.default.publisher(for: .taskExpired)) { _ in
+            // Force UI refresh when task expires
+            withAnimation(.easeInOut(duration: 0.3)) {
+                uiUpdateTrigger += 1
+                contextChangeTrigger += 1
+            }
+        }
+        .onAppear {
+            // Refresh UI when app becomes active
+            uiUpdateTrigger += 1
+            
+            // Kontrola expirovaných úkolů při otevření
+            TaskExpirationManager.shared.checkAndMarkExpiredTasks()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+            // Kontrola expirovaných úkolů při návratu z background
+            TaskExpirationManager.shared.checkAndMarkExpiredTasks()
+        }
         // .onReceive(viewContext.objectWillChange) { _ in
         //     // Force UI refresh when context changes
         //     contextChangeTrigger += 1

@@ -60,7 +60,7 @@ class NotificationManager: ObservableObject {
             date: dueDate.addingTimeInterval(-6 * 60 * 60), // 6 hodin před
             identifier: "\(task.id?.uuidString ?? "")_6hours"
         )
-                
+        
         scheduleNotification(
             for: task,
             title: "Připomenutí úkolu",
@@ -69,8 +69,8 @@ class NotificationManager: ObservableObject {
             identifier: "\(task.id?.uuidString ?? "")_12hours"
         )
         
-        // Notifikace v den deadlinu ráno (8:00)
-        if let morningDate = getMorningDate(for: dueDate) {
+        // Notifikace v den deadlinu ráno (8:00) - pouze pokud je deadline později než 8:00
+        if let morningDate = getMorningDate(for: dueDate), morningDate < dueDate {
             scheduleNotification(
                 for: task,
                 title: "Deadline dnes",
@@ -79,6 +79,15 @@ class NotificationManager: ObservableObject {
                 identifier: "\(task.id?.uuidString ?? "")_morning"
             )
         }
+        
+        // Notifikace při expiraci úkolu (hned jak deadline projde)
+        scheduleNotification(
+            for: task,
+            title: "Úkol vypršel!",
+            body: "Úkolu '\(title)' expiroval deadline",
+            date: dueDate, // Přesně v čase deadlinu
+            identifier: "\(task.id?.uuidString ?? "")_expired"
+        )
     }
     
     // MARK: - Cancel Notifications
@@ -88,7 +97,10 @@ class NotificationManager: ObservableObject {
         let identifiers = [
             "\(taskId)_15min",
             "\(taskId)_1hour",
-            "\(taskId)_morning"
+            "\(taskId)_6hours",
+            "\(taskId)_12hours",
+            "\(taskId)_morning",
+            "\(taskId)_expired"
         ]
         
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: identifiers)
