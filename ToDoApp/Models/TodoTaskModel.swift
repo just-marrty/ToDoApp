@@ -37,6 +37,11 @@ class DIContainer: ObservableObject {
         EditTaskViewModel(task: task, repository: todoRepository)
     }
     
+    // MARK: - CloudKit Status Manager
+    lazy var cloudKitStatusManager: CloudKitStatusManager = {
+        CloudKitStatusManager.shared
+    }()
+    
     // MARK: - Core Data Context
     var viewContext: NSManagedObjectContext {
         persistenceController.container.viewContext

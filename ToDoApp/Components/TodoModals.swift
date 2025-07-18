@@ -50,8 +50,10 @@ struct AddTaskView: View {
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Přidat") {
-                        if viewModel.addTask() {
-                            dismiss()
+                        Task {
+                            if await viewModel.addTask() {
+                                dismiss()
+                            }
                         }
                     }
                     .disabled(!viewModel.taskData.isValid)
@@ -138,17 +140,16 @@ struct EditTaskView: View {
                                 Text("Datum")
                                     .foregroundColor(theme.textColor)
                                 Spacer()
-                                DatePicker(
-                                    "",
+                                ThemedDatePicker(
                                     selection: $viewModel.selectedDate,
-                                    in: viewModel.dateRange,
-                                    displayedComponents: .date
+                                    displayedComponents: .date,
+                                    range: viewModel.dateRange,
+                                    theme: theme,
+                                    disabled: viewModel.task.isCompleted
                                 )
-                                .disabled(viewModel.task.isCompleted)
                                 .onChange(of: viewModel.selectedDate) { _, _ in
-                                    print("🔄 Selected date changed in EditTaskView")
+                                    print("Selected date changed in EditTaskView")
                                 }
-                                .labelsHidden()
                             }
                             .padding(.horizontal)
                             .padding(.vertical, 12)
@@ -166,7 +167,7 @@ struct EditTaskView: View {
                                         if newValue {
                                             viewModel.selectedTime = Date()
                                         }
-                                        print("🔄 Has time changed in EditTaskView: \(newValue)")
+                                        print("Has time changed in EditTaskView: \(newValue)")
                                     }
                                     .disabled(viewModel.task.isCompleted)
                                     .tint(theme.accentColor)
@@ -184,16 +185,15 @@ struct EditTaskView: View {
                                     Text("Čas")
                                         .foregroundColor(theme.textColor)
                                     Spacer()
-                                    DatePicker(
-                                        "",
+                                    ThemedDatePicker(
                                         selection: $viewModel.selectedTime,
-                                        displayedComponents: .hourAndMinute
+                                        displayedComponents: .hourAndMinute,
+                                        theme: theme,
+                                        disabled: viewModel.task.isCompleted
                                     )
-                                    .disabled(viewModel.task.isCompleted)
                                     .onChange(of: viewModel.selectedTime) { _, _ in
-                                        print("🔄 Selected time changed in EditTaskView")
+                                        print("Selected time changed in EditTaskView")
                                     }
-                                    .labelsHidden()
                                 }
                                 .padding(.horizontal)
                                 .padding(.vertical, 12)
@@ -293,10 +293,12 @@ struct EditTaskView: View {
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Uložit") {
-                        if viewModel.saveChanges() {
-                            // Force UI refresh after saving
-                            DispatchQueue.main.async {
-                                dismiss()
+                        Task {
+                            if await viewModel.saveChanges() {
+                                // Force UI refresh after saving
+                                DispatchQueue.main.async {
+                                    dismiss()
+                                }
                             }
                         }
                     }
@@ -382,16 +384,15 @@ struct DateTimeSection: View {
                     Text("Datum")
                         .foregroundColor(theme.textColor)
                     Spacer()
-                    DatePicker(
-                        "",
+                    ThemedDatePicker(
                         selection: $taskData.selectedDate,
-                        in: taskData.dateRange,
-                        displayedComponents: .date
+                        displayedComponents: .date,
+                        range: taskData.dateRange,
+                        theme: theme
                     )
                     .onChange(of: taskData.selectedDate) { _, _ in
                         onDateChange()
                     }
-                    .labelsHidden()
                 }
                 .padding(.horizontal)
                 .padding(.vertical, 12)
@@ -426,15 +427,14 @@ struct DateTimeSection: View {
                         Text("Čas")
                             .foregroundColor(theme.textColor)
                         Spacer()
-                        DatePicker(
-                            "",
+                        ThemedDatePicker(
                             selection: $taskData.selectedTime,
-                            displayedComponents: .hourAndMinute
+                            displayedComponents: .hourAndMinute,
+                            theme: theme
                         )
                         .onChange(of: taskData.selectedTime) { _, _ in
                             onDateChange()
                         }
-                        .labelsHidden()
                     }
                     .padding(.horizontal)
                     .padding(.vertical, 12)
@@ -462,11 +462,11 @@ struct TaskInfoSection: View {
     var body: some View {
         Section("Informace") {
             if let createdAt = task.createdAt {
-                InfoRow(label: "Vytvořeno", value: formatDateCzech(createdAt))
+                TaskInfoRow(label: "Vytvořeno", value: formatDateCzech(createdAt))
             }
             
             if let dueDate = task.dueDate {
-                InfoRow(label: "Původní termín", value: formatDateCzech(dueDate))
+                TaskInfoRow(label: "Původní termín", value: formatDateCzech(dueDate))
             }
         }
     }
@@ -480,7 +480,7 @@ struct TaskInfoSection: View {
     }
 }
 
-struct InfoRow: View {
+struct TaskInfoRow: View {
     let label: String
     let value: String
     @Environment(\.selectedTheme) private var theme
@@ -493,5 +493,42 @@ struct InfoRow: View {
             Text(value)
                 .foregroundColor(theme.secondaryTextColor)
         }
+    }
+}
+
+// MARK: - Custom Themed DatePicker
+struct ThemedDatePicker: View {
+    @Binding var selection: Date
+    let displayedComponents: DatePickerComponents
+    let range: ClosedRange<Date>?
+    let theme: AppTheme
+    let disabled: Bool
+    
+    init(
+        selection: Binding<Date>,
+        displayedComponents: DatePickerComponents,
+        range: ClosedRange<Date>? = nil,
+        theme: AppTheme,
+        disabled: Bool = false
+    ) {
+        self._selection = selection
+        self.displayedComponents = displayedComponents
+        self.range = range
+        self.theme = theme
+        self.disabled = disabled
+    }
+    
+    var body: some View {
+        DatePicker(
+            "",
+            selection: $selection,
+            in: range ?? Date.distantPast...Date.distantFuture,
+            displayedComponents: displayedComponents
+        )
+        .labelsHidden()
+        .accentColor(theme.accentColor)
+        .colorScheme(theme.colorScheme ?? .light)
+        .disabled(disabled)
+        .environment(\.colorScheme, theme.colorScheme ?? .light)
     }
 }

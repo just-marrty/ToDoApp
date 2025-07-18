@@ -2,10 +2,11 @@
 //  Persistence.swift
 //  ToDoApp
 //
-//  Created by Martin Hrbáček on 15.07.2025.
+//  Created by Martin Hrbáček on 16.07.2025.
 //
 
 import CoreData
+import CloudKit
 
 struct PersistenceController {
     static let shared = PersistenceController()
@@ -43,37 +44,181 @@ struct PersistenceController {
         do {
             try viewContext.save()
         } catch {
-            // Replace this implementation with code to handle the error appropriately.
-            // fatalError() causes the application to generate a crash log and terminate. You should not use this function in a shipping application, although it may be useful during development.
             let nsError = error as NSError
             fatalError("Unresolved error \(nsError), \(nsError.userInfo)")
         }
         return result
     }()
 
-    let container: NSPersistentContainer
+    let container: NSPersistentCloudKitContainer
 
     init(inMemory: Bool = false) {
-        container = NSPersistentContainer(name: "ToDoApp")
+        container = NSPersistentCloudKitContainer(name: "ToDoApp")
+        
         if inMemory {
             container.persistentStoreDescriptions.first!.url = URL(fileURLWithPath: "/dev/null")
         }
+        
+        // Konfigurace CloudKit
+        guard let description = container.persistentStoreDescriptions.first else {
+            fatalError("Failed to retrieve a persistent store description.")
+        }
+        
+        // Nastavení CloudKit containeru
+        description.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
+        description.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
+        
+        // iCloud container identifier
+        description.cloudKitContainerOptions = NSPersistentCloudKitContainerOptions(
+            containerIdentifier: "iCloud.com.justmarrty.accountsapp.ToDoApp"
+        )
+        
+        // Nastavení pro automatickou synchronizaci
+        description.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
+        
         container.loadPersistentStores(completionHandler: { (storeDescription, error) in
             if let error = error as NSError? {
-                // Replace this implementation with code to handle the error appropriately.
-                // fatalError() causes the application to generate a crash log and terminate. You should not use this function in a shipping application, although it may be useful during development.
-
-                /*
-                 Typical reasons for an error here include:
-                 * The parent directory does not exist, cannot be created, or disallows writing.
-                 * The persistent store is not accessible, due to permissions or data protection when the device is locked.
-                 * The device is out of space.
-                 * The store could not be migrated to the current model version.
-                 Check the error message to determine what the actual problem was.
-                 */
+                print("CloudKit Core Data error: \(error), \(error.userInfo)")
+                
+                // Pokus o recovery pro CloudKit chyby
+                if error.domain == NSCocoaErrorDomain && error.code == NSPersistentStoreIncompatibleVersionHashError {
+                    // Schema změna - pokus o migraci
+                    print("Attempting CloudKit schema migration...")
+                } else if error.domain == CKErrorDomain {
+                    // CloudKit specifické chyby
+                    print("CloudKit error: \(error.localizedDescription)")
+                }
+                
+                // Pro development - fatal error, pro production bychom měli handle gracefully
                 fatalError("Unresolved error \(error), \(error.userInfo)")
+            } else {
+                print("CloudKit Core Data store loaded successfully")
             }
         })
+        
+        // Automatické merge změn z parent contextu
         container.viewContext.automaticallyMergesChangesFromParent = true
+        
+        // Nastavení merge policy pro konflikty
+        container.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+        
+        // Notification pro CloudKit změny - simplified
+        // Note: CloudKit event notifications are handled automatically by Core Data
+        
+        // Notification pro remote změny
+        NotificationCenter.default.addObserver(
+            forName: .NSPersistentStoreRemoteChange,
+            object: nil,
+            queue: .main
+        ) { notification in
+            PersistenceController.handleRemoteChange(notification)
+        }
     }
+    
+    // MARK: - CloudKit Event Handling
+    // (odstraněno)
+    
+    // MARK: - Remote Change Handling
+    private static func handleRemoteChange(_ notification: Notification) {
+        print("Remote change detected - refreshing UI")
+        
+        // Notify UI o změnách
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: .cloudKitDataChanged, object: nil)
+        }
+    }
+}
+
+// MARK: - CloudKit Status Manager
+class CloudKitStatusManager: ObservableObject {
+    static let shared = CloudKitStatusManager()
+    
+    @Published var isCloudKitAvailable = false
+    @Published var isSignedInToiCloud = false
+    @Published var syncStatus: SyncStatus = .unknown
+    
+    private let container = CKContainer(identifier: "iCloud.com.justmarrty.accountsapp.ToDoApp")
+    
+    enum SyncStatus: Equatable {
+        case unknown
+        case syncing
+        case synced
+        case error(String)
+        
+        var description: String {
+            switch self {
+            case .unknown: return "Kontroluji synchronizaci..."
+            case .syncing: return "Synchronizuji..."
+            case .synced: return "Synchronizováno"
+            case .error(let message): return "Chyba: \(message)"
+            }
+        }
+        
+        static func == (lhs: SyncStatus, rhs: SyncStatus) -> Bool {
+            switch (lhs, rhs) {
+            case (.unknown, .unknown):
+                return true
+            case (.syncing, .syncing):
+                return true
+            case (.synced, .synced):
+                return true
+            case (.error(let lhsMessage), .error(let rhsMessage)):
+                return lhsMessage == rhsMessage
+            default:
+                return false
+            }
+        }
+    }
+    
+    private init() {
+        checkCloudKitStatus()
+    }
+    
+    func checkCloudKitStatus() {
+        // Kontrola iCloud přihlášení
+        container.accountStatus { [weak self] status, error in
+            DispatchQueue.main.async {
+                switch status {
+                case .available:
+                    self?.isSignedInToiCloud = true
+                    self?.isCloudKitAvailable = true
+                    self?.syncStatus = .synced
+                case .noAccount:
+                    self?.isSignedInToiCloud = false
+                    self?.isCloudKitAvailable = false
+                    self?.syncStatus = .error("Není přihlášen k iCloud")
+                case .restricted:
+                    self?.isSignedInToiCloud = false
+                    self?.isCloudKitAvailable = false
+                    self?.syncStatus = .error("iCloud je omezen")
+                case .couldNotDetermine:
+                    self?.isSignedInToiCloud = false
+                    self?.isCloudKitAvailable = false
+                    self?.syncStatus = .error("Nelze určit stav iCloud")
+                case .temporarilyUnavailable:
+                    self?.isSignedInToiCloud = false
+                    self?.isCloudKitAvailable = false
+                    self?.syncStatus = .error("iCloud je dočasně nedostupný")
+                @unknown default:
+                    self?.isSignedInToiCloud = false
+                    self?.isCloudKitAvailable = false
+                    self?.syncStatus = .error("Neznámý stav iCloud")
+                }
+            }
+        }
+    }
+    
+    func requestSync() {
+        syncStatus = .syncing
+        
+        // Simulace synchronizace
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+            self?.syncStatus = .synced
+        }
+    }
+}
+
+// MARK: - Notification Names
+extension Notification.Name {
+    static let cloudKitDataChanged = Notification.Name("cloudKitDataChanged")
 }

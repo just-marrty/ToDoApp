@@ -76,18 +76,22 @@ class ContentViewModel: ObservableObject {
             return
         }
         
-        do {
-            try repository.toggleTask(task)
-        } catch {
-            print("Error toggling task: \(error)")
+        Task {
+            do {
+                try await repository.toggleTask(task)
+            } catch {
+                print("Error toggling task: \(error)")
+            }
         }
     }
     
     func deleteTask(_ task: TodoTask) {
-        do {
-            try repository.deleteTask(task)
-        } catch {
-            print("Error deleting task: \(error)")
+        Task {
+            do {
+                try await repository.deleteTask(task)
+            } catch {
+                print("Error deleting task: \(error)")
+            }
         }
     }
     
@@ -118,11 +122,11 @@ class AddTaskViewModel: ObservableObject {
         showingDateError = taskData.isInPast
     }
     
-    func addTask() -> Bool {
+    func addTask() async -> Bool {
         guard taskData.isValid else { return false }
         
         do {
-            try repository.createTask(from: taskData)
+            try await repository.createTask(from: taskData)
             return true
         } catch {
             print("Error adding task: \(error)")
@@ -231,7 +235,7 @@ class EditTaskViewModel: ObservableObject {
         showingDateError = isInPast
     }
     
-    func saveChanges() -> Bool {
+    func saveChanges() async -> Bool {
         guard canSave else { return false }
         
         print("Saving changes for task: \(task.title ?? "Unknown")")
@@ -240,7 +244,7 @@ class EditTaskViewModel: ObservableObject {
         print("   - Is Completed: \(isCompleted)")
         
         do {
-            try repository.updateTask(task, title: title, isCompleted: isCompleted, dueDate: finalDateTime)
+            try await repository.updateTask(task, title: title, isCompleted: isCompleted, dueDate: finalDateTime)
             print("Changes saved successfully")
             return true
         } catch {

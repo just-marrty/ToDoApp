@@ -2,12 +2,13 @@
 //  ToDoAppApp.swift
 //  ToDoApp
 //
-//  Created by Martin Hrbáček on 15.07.2025.
+//  Created by Martin Hrbáček on 16.07.2025.
 //
 
 import SwiftUI
 import UserNotifications
 import CoreData
+import CloudKit
 
 @main
 struct ToDoAppApp: App {
@@ -15,6 +16,7 @@ struct ToDoAppApp: App {
     @StateObject private var diContainer = DIContainer.shared
     @StateObject private var notificationManager = NotificationManager.shared
     @StateObject private var expirationManager = TaskExpirationManager.shared
+    @StateObject private var cloudKitStatusManager = CloudKitStatusManager.shared
 
     var body: some Scene {
         WindowGroup {
@@ -22,6 +24,7 @@ struct ToDoAppApp: App {
                 .environment(\.managedObjectContext, persistenceController.container.viewContext)
                 .environment(\.todoRepository, diContainer.todoRepository)
                 .environmentObject(diContainer)
+                .environmentObject(cloudKitStatusManager)
                 .task {
                     // Požádat o povolení notifikací při spuštění
                     await requestPermission()
@@ -32,6 +35,9 @@ struct ToDoAppApp: App {
                     
                     // Kontrola expirovaných úkolů při spuštění
                     expirationManager.checkAndMarkExpiredTasks()
+                    
+                    // Kontrola CloudKit stavu
+                    cloudKitStatusManager.checkCloudKitStatus()
                 }
         }
     }

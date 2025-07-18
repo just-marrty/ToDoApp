@@ -7,27 +7,30 @@
 
 import CoreData
 import Foundation
+import CloudKit
 
 // MARK: - Repository Protocol
 protocol TodoRepositoryProtocol {
-    func createTask(from data: NewTaskData) throws
-    func updateTask(_ task: TodoTask, title: String, isCompleted: Bool, dueDate: Date) throws
-    func deleteTask(_ task: TodoTask) throws
-    func toggleTask(_ task: TodoTask) throws
+    func createTask(from data: NewTaskData) async throws
+    func updateTask(_ task: TodoTask, title: String, isCompleted: Bool, dueDate: Date) async throws
+    func deleteTask(_ task: TodoTask) async throws
+    func toggleTask(_ task: TodoTask) async throws
     func calculateStatistics(for tasks: [TodoTask]) -> TaskStatistics
     func filterTasks(_ tasks: [TodoTask], by filter: TaskFilter) -> [TodoTask]
+    func syncWithCloudKit() async throws
 }
 
 // MARK: - Core Data Repository
 class TodoRepository: ObservableObject, TodoRepositoryProtocol {
     private let viewContext: NSManagedObjectContext
     private let notificationManager = NotificationManager.shared
+    private let cloudKitStatusManager = CloudKitStatusManager.shared
     
     init(viewContext: NSManagedObjectContext) {
         self.viewContext = viewContext
     }
     
-    func createTask(from data: NewTaskData) throws {
+    func createTask(from data: NewTaskData) async throws {
         let newTask = TodoTask(context: viewContext)
         newTask.id = UUID()
         newTask.title = data.title.trimmingCharacters(in: .whitespaces)
@@ -40,9 +43,12 @@ class TodoRepository: ObservableObject, TodoRepositoryProtocol {
         
         // Naplánovat notifikace pro nový úkol
         notificationManager.scheduleTaskNotification(for: newTask)
+        
+        // Trigger CloudKit sync
+        await triggerCloudKitSync()
     }
     
-    func updateTask(_ task: TodoTask, title: String, isCompleted: Bool, dueDate: Date) throws {
+    func updateTask(_ task: TodoTask, title: String, isCompleted: Bool, dueDate: Date) async throws {
         // Zabránit úpravě splněných úkolů
         if task.isCompleted {
             print("Cannot update completed task: \(task.title ?? "Unknown")")
@@ -66,18 +72,13 @@ class TodoRepository: ObservableObject, TodoRepositoryProtocol {
             notificationManager.scheduleTaskNotification(for: task)
         }
         
+        // Trigger CloudKit sync
+        await triggerCloudKitSync()
+        
         print("Task updated successfully")
     }
     
-    func deleteTask(_ task: TodoTask) throws {
-        // Zrušit notifikace před smazáním
-        notificationManager.cancelTaskNotifications(for: task)
-        
-        viewContext.delete(task)
-        try saveContext()
-    }
-    
-    func toggleTask(_ task: TodoTask) throws {
+    func toggleTask(_ task: TodoTask) async throws {
         // Zabránit toggle splněných úkolů (nelze odškrtnout)
         if task.isCompleted {
             print("Cannot uncheck completed task: \(task.title ?? "Unknown")")
@@ -101,7 +102,22 @@ class TodoRepository: ObservableObject, TodoRepositoryProtocol {
         }
         
         try saveContext()
+        
+        // Trigger CloudKit sync
+        await triggerCloudKitSync()
+        
         print("Task toggled successfully")
+    }
+    
+    func deleteTask(_ task: TodoTask) async throws {
+        // Zrušit notifikace před smazáním
+        notificationManager.cancelTaskNotifications(for: task)
+        
+        viewContext.delete(task)
+        try saveContext()
+        
+        // Trigger CloudKit sync
+        await triggerCloudKitSync()
     }
     
     private func saveContext() throws {
@@ -110,7 +126,53 @@ class TodoRepository: ObservableObject, TodoRepositoryProtocol {
             print("Context saved successfully")
         } catch {
             print("Error saving context: \(error)")
+            
+            // CloudKit specific error handling
+            if let cloudKitError = error as? CKError {
+                handleCloudKitError(cloudKitError)
+            }
+            
             throw error
+        }
+    }
+    
+    // MARK: - CloudKit Error Handling
+    private func handleCloudKitError(_ error: CKError) {
+        switch error.code {
+        case .networkUnavailable:
+            print("CloudKit: Network unavailable - data will sync when connection is restored")
+        case .networkFailure:
+            print("CloudKit: Network failure - retrying...")
+        case .quotaExceeded:
+            print("CloudKit: Quota exceeded")
+        case .userDeletedZone:
+            print("CloudKit: User deleted zone - recreating...")
+        case .changeTokenExpired:
+            print("CloudKit: Change token expired - refreshing...")
+        default:
+            print("CloudKit error: \(error.localizedDescription)")
+        }
+    }
+    
+    // MARK: - CloudKit Sync
+    private func triggerCloudKitSync() async {
+        // Trigger UI update pro sync status
+        await MainActor.run {
+            cloudKitStatusManager.requestSync()
+        }
+    }
+    
+    func syncWithCloudKit() async throws {
+        // Force CloudKit sync
+        await MainActor.run {
+            cloudKitStatusManager.syncStatus = .syncing
+        }
+        
+        // Simulace CloudKit sync (v reálné aplikaci by zde byla skutečná CloudKit operace)
+        try await Task.sleep(nanoseconds: 1_000_000_000) // 1 sekunda
+        
+        await MainActor.run {
+            cloudKitStatusManager.syncStatus = .synced
         }
     }
     

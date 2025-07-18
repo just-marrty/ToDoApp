@@ -13,7 +13,9 @@ struct ContentView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @Environment(\.todoRepository) private var repository
     @StateObject private var viewModel: ContentViewModel
+    @StateObject private var cloudKitStatusManager = CloudKitStatusManager.shared
     @State private var uiUpdateTrigger = 0 // Force UI updates
+    @State private var showingCloudKitInfo = false
     
     @FetchRequest(
         sortDescriptors: [
@@ -33,6 +35,9 @@ struct ContentView: View {
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
+                // CloudKit Status Bar
+                CloudKitStatusBar()
+                
                 // Statistiky
                 StatsView(statistics: viewModel.statistics(from: Array(tasks)))
                 
@@ -65,9 +70,29 @@ struct ContentView: View {
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: { viewModel.showingAddTask = true }) {
-                        Image(systemName: "plus")
-                            .foregroundColor(viewModel.selectedTheme.accentColor)
+                    HStack {
+                        // CloudKit info button
+                        Button(action: { showingCloudKitInfo = true }) {
+                            Image(systemName: "info.circle")
+                                .foregroundColor(viewModel.selectedTheme.accentColor)
+                        }
+                        
+                        // Sync button
+                        Button(action: {
+                            Task {
+                                try? await repository.syncWithCloudKit()
+                            }
+                        }) {
+                            Image(systemName: "arrow.clockwise")
+                                .foregroundColor(viewModel.selectedTheme.accentColor)
+                        }
+                        .disabled(!cloudKitStatusManager.isCloudKitAvailable)
+                        
+                        // Add task button
+                        Button(action: { viewModel.showingAddTask = true }) {
+                            Image(systemName: "plus")
+                                .foregroundColor(viewModel.selectedTheme.accentColor)
+                        }
                     }
                 }
             }
@@ -80,10 +105,20 @@ struct ContentView: View {
                 EditTaskView(task: task, theme: viewModel.selectedTheme)
             }
         }
+        .sheet(isPresented: $showingCloudKitInfo) {
+            CloudKitInfoView()
+        }
         .preferredColorScheme(viewModel.selectedTheme.colorScheme)
         .environment(\.selectedTheme, viewModel.selectedTheme)
         .onReceive(NotificationCenter.default.publisher(for: .taskExpired)) { _ in
             // Force UI refresh when task expires
+            withAnimation(.easeInOut(duration: 0.3)) {
+                uiUpdateTrigger += 1
+                contextChangeTrigger += 1
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .cloudKitDataChanged)) { _ in
+            // Force UI refresh when CloudKit data changes
             withAnimation(.easeInOut(duration: 0.3)) {
                 uiUpdateTrigger += 1
                 contextChangeTrigger += 1
@@ -104,6 +139,180 @@ struct ContentView: View {
         //     // Force UI refresh when context changes
         //     contextChangeTrigger += 1
         // }
+    }
+}
+
+// MARK: - CloudKit Status Bar
+struct CloudKitStatusBar: View {
+    @StateObject private var cloudKitStatusManager = CloudKitStatusManager.shared
+    @Environment(\.selectedTheme) private var theme
+    
+    var body: some View {
+        if !cloudKitStatusManager.isCloudKitAvailable {
+            HStack {
+                Image(systemName: "icloud.slash")
+                    .foregroundColor(theme.expiredColor)
+                Text("iCloud není dostupný - úkoly se nesynchronizují")
+                    .font(.caption)
+                    .foregroundColor(theme.expiredColor)
+                Spacer()
+                Button("Nastavení") {
+                    // Otevřít nastavení iCloud
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                }
+                .font(.caption)
+                .foregroundColor(theme.accentColor)
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+            .background(theme.expiredColor.opacity(0.1))
+        } else if cloudKitStatusManager.syncStatus == .syncing {
+            HStack {
+                ProgressView()
+                    .scaleEffect(0.8)
+                    .foregroundColor(theme.accentColor)
+                Text(cloudKitStatusManager.syncStatus.description)
+                    .font(.caption)
+                    .foregroundColor(theme.accentColor)
+                Spacer()
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+            .background(theme.accentColor.opacity(0.1))
+        } else if case .error(let message) = cloudKitStatusManager.syncStatus {
+            HStack {
+                Image(systemName: "exclamationmark.triangle")
+                    .foregroundColor(theme.expiredColor)
+                Text(message)
+                    .font(.caption)
+                    .foregroundColor(theme.expiredColor)
+                Spacer()
+                Button("Zkusit znovu") {
+                    cloudKitStatusManager.checkCloudKitStatus()
+                }
+                .font(.caption)
+                .foregroundColor(theme.accentColor)
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+            .background(theme.expiredColor.opacity(0.1))
+        }
+    }
+}
+
+// MARK: - CloudKit Info View
+struct CloudKitInfoView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.selectedTheme) private var theme
+    @StateObject private var cloudKitStatusManager = CloudKitStatusManager.shared
+    
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    // Status sekce
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Stav synchronizace")
+                            .font(.headline)
+                            .foregroundColor(theme.textColor)
+                        
+                        HStack {
+                            Image(systemName: cloudKitStatusManager.isCloudKitAvailable ? "icloud" : "icloud.slash")
+                                .foregroundColor(cloudKitStatusManager.isCloudKitAvailable ? theme.accentColor : theme.expiredColor)
+                            Text(cloudKitStatusManager.isCloudKitAvailable ? "iCloud je dostupný" : "iCloud není dostupný")
+                                .foregroundColor(theme.textColor)
+                        }
+                        
+                        HStack {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                                .foregroundColor(theme.accentColor)
+                            Text(cloudKitStatusManager.syncStatus.description)
+                                .foregroundColor(theme.textColor)
+                        }
+                    }
+                    .padding()
+                    .background(theme.taskRowBackground)
+                    .cornerRadius(12)
+                    
+                    // Informace sekce
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("O synchronizaci")
+                            .font(.headline)
+                            .foregroundColor(theme.textColor)
+                        
+                        VStack(alignment: .leading, spacing: 8) {
+                            InfoRow(icon: "icloud", text: "Úkoly se automaticky synchronizují mezi všemi zařízeními")
+                            InfoRow(icon: "wifi", text: "Synchronizace probíhá přes internet")
+                            InfoRow(icon: "clock", text: "Změny se projeví během několika sekund")
+                            InfoRow(icon: "exclamationmark.triangle", text: "Aplikace funguje i offline")
+                        }
+                    }
+                    .padding()
+                    .background(theme.taskRowBackground)
+                    .cornerRadius(12)
+                    
+                    // Nastavení sekce
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Nastavení")
+                            .font(.headline)
+                            .foregroundColor(theme.textColor)
+                        
+                        Button(action: {
+                            if let url = URL(string: UIApplication.openSettingsURLString) {
+                                UIApplication.shared.open(url)
+                            }
+                        }) {
+                            HStack {
+                                Image(systemName: "gear")
+                                    .foregroundColor(theme.accentColor)
+                                Text("Otevřít nastavení iCloud")
+                                    .foregroundColor(theme.accentColor)
+                                Spacer()
+                                Image(systemName: "arrow.up.right.square")
+                                    .foregroundColor(theme.accentColor)
+                            }
+                        }
+                        .padding()
+                        .background(theme.accentColor.opacity(0.1))
+                        .cornerRadius(8)
+                    }
+                    .padding()
+                    .background(theme.taskRowBackground)
+                    .cornerRadius(12)
+                }
+                .padding()
+            }
+            .background(theme.backgroundColor)
+            .navigationTitle("Synchronizace")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Zavřít") { dismiss() }
+                        .foregroundColor(theme.accentColor)
+                }
+            }
+        }
+        .preferredColorScheme(theme.colorScheme)
+    }
+}
+
+struct InfoRow: View {
+    let icon: String
+    let text: String
+    @Environment(\.selectedTheme) private var theme
+    
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: icon)
+                .foregroundColor(theme.accentColor)
+                .frame(width: 20)
+            Text(text)
+                .foregroundColor(theme.textColor)
+                .font(.subheadline)
+            Spacer()
+        }
     }
 }
 
