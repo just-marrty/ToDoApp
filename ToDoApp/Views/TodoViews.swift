@@ -91,46 +91,46 @@ struct CustomHeaderView: View {
     var isCloudKitAvailable: Bool
     
     var body: some View {
-        HStack {
-            // Theme toggle
-            Button(action: {
-                withAnimation(.easeInOut(duration: 0.6)) {
-                    selectedTheme = selectedTheme == .default ? .dark : .default
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                // Theme toggle
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.6)) {
+                        selectedTheme = selectedTheme == .default ? .dark : .default
+                    }
+                }) {
+                    Image(systemName: selectedTheme == .default ? "moon.fill" : "sun.max.fill")
+                        .foregroundColor(selectedTheme.accentColor)
+                        .font(.title2)
                 }
-            }) {
-                Image(systemName: selectedTheme == .default ? "moon.fill" : "sun.max.fill")
-                    .foregroundColor(selectedTheme.accentColor)
-                    .font(.title2)
+                .accessibilityLabel(selectedTheme == .default ? "Přepnout na tmavý režim" : "Přepnout na světlý režim")
+                
+                Spacer()
+                
+                HStack(spacing: 16) {
+                    Button(action: onInfo) {
+                        Image(systemName: "info.circle")
+                            .foregroundColor(selectedTheme.accentColor)
+                            .font(.title2)
+                    }
+                    Button(action: onSync) {
+                        Image(systemName: "arrow.clockwise")
+                            .foregroundColor(selectedTheme.accentColor)
+                            .font(.title2)
+                    }
+                    .disabled(!isCloudKitAvailable)
+                    Button(action: onAdd) {
+                        Image(systemName: "plus")
+                            .foregroundColor(selectedTheme.accentColor)
+                            .font(.title2)
+                    }
+                }
             }
-            .accessibilityLabel(selectedTheme == .default ? "Přepnout na tmavý režim" : "Přepnout na světlý režim")
-            
-            Spacer()
             
             Text("Moje úkoly")
                 .font(.largeTitle).bold()
                 .foregroundColor(selectedTheme.textColor)
                 .animation(.easeInOut(duration: 0.6), value: selectedTheme)
-            
-            Spacer()
-            
-            HStack(spacing: 16) {
-                Button(action: onInfo) {
-                    Image(systemName: "info.circle")
-                        .foregroundColor(selectedTheme.accentColor)
-                        .font(.title2)
-                }
-                Button(action: onSync) {
-                    Image(systemName: "arrow.clockwise")
-                        .foregroundColor(selectedTheme.accentColor)
-                        .font(.title2)
-                }
-                .disabled(!isCloudKitAvailable)
-                Button(action: onAdd) {
-                    Image(systemName: "plus")
-                        .foregroundColor(selectedTheme.accentColor)
-                        .font(.title2)
-                }
-            }
         }
         .padding(.horizontal)
         .padding(.top, 16)
