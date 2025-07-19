@@ -65,6 +65,14 @@ class TodoRepository: ObservableObject, TodoRepositoryProtocol {
         
         try saveContext()
         
+        // Force refresh the task object
+        viewContext.refresh(task, mergeChanges: true)
+        
+        // Post notification to refresh UI
+        await MainActor.run {
+            NotificationCenter.default.post(name: .taskUpdated, object: task)
+        }
+        
         // Aktualizovat notifikace
         if isCompleted {
             notificationManager.cancelTaskNotifications(for: task)

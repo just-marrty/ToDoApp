@@ -15,12 +15,14 @@ struct ContentView: View {
     @StateObject private var viewModel: ContentViewModel
     @StateObject private var cloudKitStatusManager = CloudKitStatusManager.shared
     @State private var showingCloudKitInfo = false
+    @State private var refreshID = UUID()
     
     @FetchRequest(
         sortDescriptors: [
             NSSortDescriptor(keyPath: \TodoTask.createdAt, ascending: false),
             NSSortDescriptor(keyPath: \TodoTask.dueDate, ascending: true)
-        ]
+        ],
+        animation: .default
     ) private var tasks: FetchedResults<TodoTask>
     
     init() {
@@ -59,6 +61,7 @@ struct ContentView: View {
                 onEdit: viewModel.editTask,
                 theme: viewModel.selectedTheme
             )
+            .id(refreshID)
             Spacer()
         }
         .background(viewModel.selectedTheme.backgroundColor)
@@ -73,11 +76,21 @@ struct ContentView: View {
                 EditTaskView(task: task, theme: viewModel.selectedTheme)
             }
         }
+        .onChange(of: viewModel.showingEditTask) { _, isShowing in
+            if !isShowing {
+                // Force refresh of FetchRequest when edit modal is dismissed
+                refreshID = UUID()
+            }
+        }
         .sheet(isPresented: $showingCloudKitInfo) {
             CloudKitInfoView(theme: viewModel.selectedTheme)
         }
         .onAppear {
             TaskExpirationManager.shared.checkAndMarkExpiredTasks()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .taskUpdated)) { _ in
+            // Force refresh of FetchRequest
+            refreshID = UUID()
         }
     }
 }

@@ -68,6 +68,7 @@ struct AddTaskView: View {
 // MARK: - Edit Task View
 struct EditTaskView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.managedObjectContext) private var viewContext
     @StateObject private var viewModel: EditTaskViewModel
     
     let theme: AppTheme
@@ -297,6 +298,8 @@ struct EditTaskView: View {
                             if await viewModel.saveChanges() {
                                 // Force UI refresh after saving
                                 DispatchQueue.main.async {
+                                    // Post notification to refresh UI
+                                    NotificationCenter.default.post(name: .taskUpdated, object: viewModel.task)
                                     dismiss()
                                 }
                             }

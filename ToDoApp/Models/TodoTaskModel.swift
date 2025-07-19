@@ -170,6 +170,13 @@ struct TaskStatistics {
     )
 }
 
+// MARK: - Notification Names
+extension Notification.Name {
+    static let taskUpdated = Notification.Name("taskUpdated")
+}
+
+
+
 // MARK: - Task Extensions
 extension TodoTask {
     var isExpired: Bool {
