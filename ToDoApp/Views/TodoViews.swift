@@ -74,7 +74,7 @@ struct ContentView: View {
             }
         }
         .sheet(isPresented: $showingCloudKitInfo) {
-            CloudKitInfoView()
+            CloudKitInfoView(theme: viewModel.selectedTheme)
         }
         .onAppear {
             TaskExpirationManager.shared.checkAndMarkExpiredTasks()
@@ -201,8 +201,12 @@ struct CloudKitStatusBar: View {
 // MARK: - CloudKit Info View
 struct CloudKitInfoView: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.selectedTheme) private var theme
+    let theme: AppTheme
     @StateObject private var cloudKitStatusManager = CloudKitStatusManager.shared
+    
+    init(theme: AppTheme) {
+        self.theme = theme
+    }
     
     var body: some View {
         NavigationView {
@@ -239,10 +243,10 @@ struct CloudKitInfoView: View {
                             .foregroundColor(theme.textColor)
                         
                         VStack(alignment: .leading, spacing: 8) {
-                            InfoRow(icon: "icloud", text: "Úkoly se automaticky synchronizují mezi všemi zařízeními")
-                            InfoRow(icon: "wifi", text: "Synchronizace probíhá přes internet")
-                            InfoRow(icon: "clock", text: "Změny se projeví během několika sekund")
-                            InfoRow(icon: "exclamationmark.triangle", text: "Aplikace funguje i offline")
+                            InfoRow(icon: "icloud", text: "Úkoly se automaticky synchronizují mezi všemi zařízeními", theme: theme)
+                            InfoRow(icon: "wifi", text: "Synchronizace probíhá přes internet", theme: theme)
+                            InfoRow(icon: "clock", text: "Změny se projeví během několika sekund", theme: theme)
+                            InfoRow(icon: "exclamationmark.triangle", text: "Aplikace funguje i offline", theme: theme)
                         }
                     }
                     .padding()
@@ -297,7 +301,7 @@ struct CloudKitInfoView: View {
 struct InfoRow: View {
     let icon: String
     let text: String
-    @Environment(\.selectedTheme) private var theme
+    let theme: AppTheme
     
     var body: some View {
         HStack(alignment: .top, spacing: 12) {

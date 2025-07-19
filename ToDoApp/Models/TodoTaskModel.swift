@@ -100,50 +100,50 @@ enum AppTheme: String, CaseIterable {
     
     var backgroundColor: Color {
         switch self {
-        case .default: return Color(red: 0.98, green: 0.96, blue: 0.94) // Pastelové světlé beige pozadí
-        case .dark: return Color(red: 0.12, green: 0.12, blue: 0.14) // Tmavé pozadí
+        case .default: return Color(red: 0.94, green: 0.96, blue: 0.98) // Světle modré pozadí
+        case .dark: return Color(red: 0.10, green: 0.12, blue: 0.16) // Tmavě modré pozadí
         }
     }
-    
+
     var taskRowBackground: Color {
         switch self {
-        case .default: return Color(red: 0.94, green: 0.91, blue: 0.88) // Tmavší pastelové beige
-        case .dark: return Color(red: 0.18, green: 0.18, blue: 0.20) // Tmavší šedá
+        case .default: return Color(red: 0.88, green: 0.92, blue: 0.96) // Světle modro-šedé
+        case .dark: return Color(red: 0.16, green: 0.18, blue: 0.22) // Tmavší modro-šedá
         }
     }
-    
+
     var accentColor: Color {
         switch self {
-        case .default: return Color(red: 0.85, green: 0.45, blue: 0.25) // Tmavě oranžová akcent
-        case .dark: return Color(red: 0.90, green: 0.50, blue: 0.30) // Světlejší tmavě oranžová
+        case .default: return Color(red: 0.35, green: 0.50, blue: 0.85) // Jasně modrá akcent
+        case .dark: return Color(red: 0.45, green: 0.60, blue: 0.90) // Světlejší modrá
         }
     }
-    
+
     var textColor: Color {
         switch self {
-        case .default: return Color(red: 0.25, green: 0.25, blue: 0.25) // Tmavý text
-        case .dark: return Color(red: 0.92, green: 0.92, blue: 0.92) // Světlý text
+        case .default: return Color(red: 0.20, green: 0.25, blue: 0.30) // Tmavý modro-šedý text
+        case .dark: return Color(red: 0.90, green: 0.92, blue: 0.95) // Světlý text s nádechem modré
         }
     }
-    
+
     var secondaryTextColor: Color {
         switch self {
-        case .default: return Color(red: 0.45, green: 0.45, blue: 0.45) // Šedý text
-        case .dark: return Color(red: 0.75, green: 0.75, blue: 0.75) // Světle šedý text
+        case .default: return Color(red: 0.40, green: 0.45, blue: 0.50) // Modro-šedý text
+        case .dark: return Color(red: 0.70, green: 0.75, blue: 0.80) // Světle modro-šedý text
         }
     }
-    
+
     var expiredColor: Color {
         switch self {
-        case .default: return Color(red: 0.85, green: 0.45, blue: 0.25) // Tmavě oranžová pro expirované
-        case .dark: return Color(red: 0.90, green: 0.50, blue: 0.30) // Světlejší tmavě oranžová
+        case .default: return Color(red: 0.85, green: 0.35, blue: 0.45) // Červeno-růžová pro expirované
+        case .dark: return Color(red: 0.90, green: 0.45, blue: 0.55) // Světlejší červeno-růžová
         }
     }
-    
+
     var completedColor: Color {
         switch self {
-        case .default: return Color(red: 0.60, green: 0.80, blue: 0.40) // Světlejší zelená pro splněné
-        case .dark: return Color(red: 0.65, green: 0.85, blue: 0.45) // Světlejší zelená pro tmavý režim
+        case .default: return Color(red: 0.30, green: 0.75, blue: 0.55) // Zeleno-tyrkysová pro splněné
+        case .dark: return Color(red: 0.40, green: 0.80, blue: 0.65) // Světlejší zeleno-tyrkysová
         }
     }
     
